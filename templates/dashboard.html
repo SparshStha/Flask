@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Dashboard</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  
+  <!-- Bootstrap CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.slim.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  
+  <!-- Custom CSS -->
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(120deg, #f8f9fa, #e0eafc);
+      font-family: 'Arial', sans-serif;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .container {
+      max-width: 600px;
+      background-color: #ffffff;
+      padding: 40px;
+      border-radius: 10px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+      text-align: center;
+    }
+    h2 {
+      color: #333;
+      font-size: 36px;
+      font-weight: bold;
+      margin-bottom: 20px;
+    }
+    p {
+      font-size: 18px;
+      color: #555;
+    }
+    ul {
+      list-style-type: none;
+      padding: 0;
+    }
+    ul li {
+      font-size: 20px;
+      color: #333;
+      padding: 10px 0;
+    }
+    .btn {
+      margin-top: 20px;
+      font-size: 16px;
+      padding: 12px 30px;
+      border-radius: 5px;
+      font-weight: bold;
+      transition: background-color 0.3s ease;
+    }
+    .btn-dark {
+      background-color: #343a40;
+      border-color: #343a40;
+    }
+    .btn-dark:hover {
+      background-color: #23272b;
+    }
+    .btn-info {
+      background-color: #17a2b8;
+      border-color: #17a2b8;
+    }
+    .btn-info:hover {
+      background-color: #138496;
+    }
+    .text-danger {
+      color: #dc3545;
+      font-size: 16px;
+    }
+
+    .alert {
+      position: absolute;
+      top: 0px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      z-index: 1000;
+    }
+  </style>
+
+<script>
+  $(document).ready(function() {
+    setTimeout(function() {
+      $('.alert').alert('close');
+    }, 3000); // 3 seconds before the alert disappears
+  });
+</script>
+
+</head>
+<body>
+
+<!-- Flash Messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+      {% for category, message in messages %}
+        {{ message }}
+      {% endfor %}
+      <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+        <span aria-hidden="true">&times;</span>
+      </button>
+    </div>
+  {% endif %}
+{% endwith %}
+
+<div class="container">
+  <h2>Welcome to the Dashboard</h2>
+
+  {% if user %}
+    <div class="user-info">
+      <p><strong>User Information:</strong></p>
+      <ul>
+        <li><strong>Name:</strong> {{ user[1] }}</li>
+        <li><strong>Email:</strong> {{ user[2] }}</li>
+      </ul>
+      <a href="/logout" class="btn btn-dark">Logout</a>
+      <a href="/edit_profile" class="btn btn-info">Edit Profile</a>
+    </div>
+  {% else %}
+    <p class="text-danger">User information not available.</p>
+  {% endif %}
+
+</div>
+
+</body>
+</html>

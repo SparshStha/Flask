@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Register Account</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  
+  <!-- Bootstrap CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.slim.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+
+  <!-- Custom CSS for the form -->
+  <style>
+    body {
+      background-color: #f0f8ff;
+    }
+    .container {
+      margin-top: 100px;
+      width: 400px;
+      background-color: #ffffff;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+    }
+    h2 {
+      text-align: center;
+      margin-bottom: 30px;
+      color: #333;
+      font-family: 'Arial', sans-serif;
+    }
+    .form-group label {
+      font-weight: bold;
+      color: #555;
+    }
+    .form-control {
+      border-radius: 5px;
+      border: 1px solid #ddd;
+      padding: 10px;
+      font-size: 16px;
+    }
+    .btn {
+      width: 100%;
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 5px;
+    }
+    .btn-dark {
+      background-color: #007bff;
+      border-color: #007bff;
+    }
+    .btn-dark:hover {
+      background-color: #0056b3;
+      border-color: #0056b3;
+    }
+    .checkbox label {
+      font-size: 14px;
+      color: #555;
+    }
+    .alert-danger {
+      color: red;
+      font-size: 14px;
+    }
+    .suggest-btn {
+      background-color: transparent;
+      border: none;
+      font-size: 16px;
+      margin-left: 10px;
+      color: #007bff;
+      cursor: pointer;
+    }
+    .suggest-btn:hover {
+      color: #0056b3;
+    }
+    .eye-toggle {
+      position: absolute;
+      right: 15px;
+      top: 38px;
+      cursor: pointer;
+      font-size: 20px;
+    }
+    .password-container {
+      position: relative;
+    }
+    .password-strength {
+      margin-top: 10px;
+    }
+    .progress {
+      height: 10px;
+    }
+    li {
+      list-style-type: none;
+      margin: 5px 0;
+      color: red;
+    }
+    ul.text-danger {
+      padding-left: 0;
+      margin-left: 0;
+      list-style-position: inside;
+      text-align: left;
+    }
+  </style>
+
+  <!-- JavaScript for password strength validation -->
+  <script>
+    function togglePassword() {
+      let passwordField = document.getElementById("password");
+      let eyeIcon = document.getElementById("eyeIcon");
+      if (passwordField.type === "password") {
+        passwordField.type = "text";
+        eyeIcon.textContent = '🙈';
+      } else {
+        passwordField.type = "password";
+        eyeIcon.textContent = '👁️';
+      }
+    }
+
+    // Function to generate a strong password
+    function generateStrongPassword() {
+      let length = 12;
+      let charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+~";
+      let password = "";
+      for (let i = 0, n = charset.length; i < length; ++i) {
+        password += charset.charAt(Math.floor(Math.random() * n));
+      }
+      let passwordField = document.getElementById("password");
+      let eyeIcon = document.getElementById("eyeIcon");
+
+      passwordField.value = password;
+      passwordField.type = "text";
+      eyeIcon.textContent = '🙈';
+    }
+
+    // Function to validate email
+    function validateEmail() {
+      let emailField = document.getElementById("email");
+      let email = emailField.value;
+      let emailError = document.getElementById("emailError");
+
+      let emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+      if (emailRegex.test(email)) {
+        emailError.textContent = "";
+        emailField.classList.remove("is-invalid");
+      } else {
+        emailError.textContent = "Invalid email address";
+        emailField.classList.add("is-invalid");
+      }
+    }
+
+    // Function to check password strength
+    function checkPasswordStrength() {
+      let password = document.getElementById("password").value;
+      let strengthText = document.getElementById("passwordStrengthText");
+      let progressBar = document.getElementById("passwordStrengthBar");
+
+      let strength = 0;
+
+      // Increase strength if conditions are met
+      if (password.length >= 8) strength += 1;
+      if (/[A-Z]/.test(password)) strength += 1;
+      if (/[a-z]/.test(password)) strength += 1;
+      if (/\d/.test(password)) strength += 1;
+      if (/[\W]/.test(password)) strength += 1;
+
+      // Progress bar and text based on the strength value
+      if (strength <= 1) {
+        progressBar.classList.remove("bg-success", "bg-warning");
+        progressBar.classList.add("bg-danger");
+        progressBar.style.width = "20%";
+        strengthText.textContent = "Very Weak";
+      } else if (strength === 2) {
+        progressBar.classList.remove("bg-success", "bg-danger");
+        progressBar.classList.add("bg-warning");
+        progressBar.style.width = "40%";
+        strengthText.textContent = "Weak";
+      } else if (strength === 3) {
+        progressBar.classList.remove("bg-success", "bg-danger");
+        progressBar.classList.add("bg-warning");
+        progressBar.style.width = "60%";
+        strengthText.textContent = "Moderate";
+      } else if (strength === 4) {
+        progressBar.classList.remove("bg-danger", "bg-warning");
+        progressBar.classList.add("bg-success");
+        progressBar.style.width = "80%";
+        strengthText.textContent = "Strong";
+      } else if (strength === 5) {
+        progressBar.classList.remove("bg-danger", "bg-warning");
+        progressBar.classList.add("bg-success");
+        progressBar.style.width = "100%";
+        strengthText.textContent = "Very Strong";
+      }
+    }
+  </script>
+</head>
+<body>
+
+  <div class="container">
+    <h2>Register Account</h2>
+  
+    <form action="/register" method="POST">
+      {{ form.hidden_tag() }}
+
+      <div class="form-group">
+        {{ form.name.label(for="name") }}
+        {{ form.name(id="name", class="form-control") }}
+
+        {% if form.name.errors %}
+        <ul class="text-danger">
+          {% for error in form.name.errors %}
+          <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+
+      <div class="form-group">
+        {{ form.email.label(for="email") }}
+        {{ form.email(id="email", class="form-control", onchange="validateEmail()") }}
+        <span id="emailError" class="text-danger"></span>
+      </div>
+
+      {% if form.email.errors %}
+        {% for error in form.email.errors %}
+        <p class="text-danger">{{ error }}</p>
+        {% endfor %}
+      {% endif %}
+
+      <div class="form-group password-container">
+        {{ form.password.label(for="password") }}
+        {{ form.password(id="password", class="form-control", onkeyup="checkPasswordStrength()") }}
+        <span id="eyeIcon" class="eye-toggle" onclick="togglePassword()">👁️</span>
+
+        <!-- Password strength progress bar and text -->
+        <div class="password-strength mt-2">
+          <div class="progress">
+            <div id="passwordStrengthBar" class="progress-bar" role="progressbar" style="width: 0;"></div>
+          </div>
+          <small id="passwordStrengthText" class="form-text text-muted">Enter a password to see the strength</small>
+        </div>
+
+        {% if form.password.errors %}
+        <ul class="text-danger">
+          {% for error in form.password.errors %}
+          <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+
+      <div class="d-flex justify-content-end">
+        <button type="button" class="suggest-btn" onclick="generateStrongPassword()">🔑 Suggest Strong Password</button>
+      </div>
+
+      <!-- reCAPTCHA -->
+      <div class="mt-3">
+        <div class="g-recaptcha" data-sitekey="6LfWUT0qAAAAAAxxvO_hvRsBd4Yn8Rrot_IJKXer"></div>
+        <br/>
+      </div>
+
+      <div class="mt-1">
+        {{ form.submit(class="btn btn-dark mt-1") }}
+      </div>
+
+      <div class="mt-3 text-center">
+        <p>Already Member? <a href="/login">Login</a></p>
+      </div>
+    </form>
+  </div>
+
+</body>
+</html>

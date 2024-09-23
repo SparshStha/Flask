@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Edit Profile</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  
+  <!-- Bootstrap CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.slim.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+
+  <!-- Custom Styles -->
+  <style>
+    body {
+      background: linear-gradient(120deg, #f8f9fa, #e0eafc);
+      font-family: 'Arial', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .container {
+      background-color: #ffffff;
+      padding: 40px;
+      border-radius: 10px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+      max-width: 600px;
+      width: 100%;
+    }
+    h2 {
+      color: #333;
+      font-size: 36px;
+      margin-bottom: 30px;
+      font-weight: bold;
+      text-align: center;
+    }
+    .form-group label {
+      font-size: 18px;
+      color: #555;
+    }
+    .form-control {
+      border-radius: 5px;
+      font-size: 16px;
+      padding: 10px;
+      margin-bottom: 10px;
+      border: 1px solid #ddd;
+    }
+    .input-group .toggle-eye {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      cursor: pointer;
+    }
+    .btn-primary {
+      background-color: #007bff;
+      border-color: #007bff;
+      padding: 12px 30px;
+      font-size: 18px;
+      font-weight: bold;
+      border-radius: 5px;
+      transition: background-color 0.3s ease;
+    }
+    .btn-primary:hover {
+      background-color: #0056b3;
+    }
+    .btn-dark {
+      background-color: #343a40;
+      border-color: #343a40;
+      padding: 12px 30px;
+      font-size: 18px;
+      font-weight: bold;
+      border-radius: 5px;
+      transition: background-color 0.3s ease;
+    }
+    .btn-dark:hover {
+      background-color: #23272b;
+    }
+    .text-danger {
+      font-size: 14px;
+      color: #dc3545;
+    }
+    .form-group {
+      text-align: left;
+    }
+
+    form {
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>Edit Profile</h2>
+
+  <form method="POST">
+    {{ form.hidden_tag() }}
+    
+    <div class="form-group">
+      <label for="name">Name</label>
+      {{ form.name(class="form-control") }}
+      {% for error in form.name.errors %}
+        <span class="text-danger">{{ error }}</span>
+      {% endfor %}
+    </div>
+    
+    <div class="form-group">
+      <label for="email">Email</label>
+      {{ form.email(class="form-control") }}
+      {% for error in form.email.errors %}
+        <span class="text-danger">{{ error }}</span>
+      {% endfor %}
+    </div>
+    
+    <div class="form-group">
+      <label for="current_password">Current Password</label>
+      <div class="input-group">
+        {{ form.current_password(class="form-control", id="currentPassword") }}
+        <span class="toggle-eye" onclick="togglePassword('currentPassword')">
+          <img src="https://cdn-icons-png.flaticon.com/512/633/633633.png" width="20px" id="currentPasswordEye" alt="Toggle Password">
+        </span>
+      </div>
+      {% for error in form.current_password.errors %}
+        <span class="text-danger">{{ error }}</span>
+      {% endfor %}
+    </div>
+
+    <div class="form-group">
+      <label for="new_password">New Password</label>
+      <div class="input-group">
+        {{ form.new_password(class="form-control", id="newPassword") }}
+        <span class="toggle-eye" onclick="togglePassword('newPassword')">
+          <img src="https://cdn-icons-png.flaticon.com/512/633/633633.png" width="20px" id="newPasswordEye" alt="Toggle Password">
+        </span>
+      </div>
+      {% for error in form.new_password.errors %}
+        <span class="text-danger">{{ error }}</span>
+      {% endfor %}
+    </div>
+
+    <div class="form-group">
+      <label for="confirm_password">Confirm Password</label>
+      <div class="input-group">
+        {{ form.confirm_password(class="form-control", id="confirmPassword") }}
+        <span class="toggle-eye" onclick="togglePassword('confirmPassword')">
+          <img src="https://cdn-icons-png.flaticon.com/512/633/633633.png" width="20px" id="confirmPasswordEye" alt="Toggle Password">
+        </span>
+      </div>
+      {% for error in form.confirm_password.errors %}
+        <span class="text-danger">{{ error }}</span>
+      {% endfor %}
+    </div>
+    
+    <button type="submit" class="btn btn-primary">Update Profile</button>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-dark">Cancel</a>
+  </form>
+
+</div>
+
+<!-- JavaScript to toggle password visibility -->
+<script>
+  function togglePassword(fieldId) {
+    const passwordField = document.getElementById(fieldId);
+    const eyeIcon = document.getElementById(fieldId + 'Eye');
+    if (passwordField.type === "password") {
+      passwordField.type = "text";
+      eyeIcon.src = "https://cdn-icons-png.flaticon.com/512/159/159604.png"; 
+    } else {
+      passwordField.type = "password";
+      eyeIcon.src = "https://cdn-icons-png.flaticon.com/512/633/633633.png"; 
+    }
+  }
+</script>
+
+</body>
+</html>
