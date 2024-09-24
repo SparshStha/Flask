@@ -1,42 +1,50 @@
-from flask import Flask, render_template, redirect, url_for, session, flash
+
+# MySQL Configuration
+
+from flask import Flask, render_template, redirect, url_for, session, flash, request
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField
-from wtforms.validators import DataRequired, Email, ValidationError
+from wtforms.validators import DataRequired, Email, ValidationError, EqualTo
 import bcrypt
-import re  # For regex to validate strong passwords
-from flask_mysqldb import MySQL
-import sys
+import re
 from datetime import datetime, timedelta
+from flask_jwt_extended import JWTManager
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
+from flask_jwt_extended import (
+    JWTManager, create_access_token, jwt_required, get_jwt_identity,
+    set_access_cookies, unset_jwt_cookies, get_csrf_token
+)
+import os
+
 
 app = Flask(__name__)
 
-# MySQL Configuration
-app.config['MYSQL_HOST'] = 'localhost'
-app.config['MYSQL_USER'] = 'root'
-app.config['MYSQL_PASSWORD'] = ''
-app.config['MYSQL_DB'] = 'mydatabase'
+DB_USERNAME = 'dipesh' # Change this to your username
+DB_PASSWORD = 'dipesh' # Change this to your password
+DB_HOST = 'localhost' # Change this to your MySQL host
+DB_NAME = 'acs' # Change this to your database name
+
+# Database Configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USERNAME}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+app.config['JWT_SECRET_KEY'] = 'ELJLH7KB42eqEqEabF7idfNOI5h3EXBh72vT4CKx82g='  
+app.config['JWT_TOKEN_LOCATION'] = ['cookies']
+app.config['JWT_ACCESS_COOKIE_NAME'] = 'access_token'
+# app.config['JWT_COOKIE_CSRF_PROTECT'] = False  # Set to True and handle CSRF in forms for better security
+app.config['JWT_COOKIE_CSRF_PROTECT'] = True
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
+
+
+
+jwt = JWTManager(app)
+
+
 app.secret_key = 'your_secret_key_here'
 
-mysql = MySQL(app)
-
-
-# Check MySQL Database Connection
-def check_db_connection():
-    try:
-        with app.app_context():  # Set up application context
-            # Attempt to create a cursor and execute a simple query
-            cursor = mysql.connection.cursor()
-            cursor.execute("SELECT 1")  # Simple query to check connection
-            cursor.close()
-            print("Database connection successful.")
-    except Exception as e:
-        # If there is an error, print it and exit the app
-        print(f"Error: Could not connect to the database. {e}")
-        sys.exit(1)  # Terminate the app if the connection fails
-
-# Call the function to check the connection before the app starts
-check_db_connection()
-
+db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 
 # Custom validator for strong password
 def validate_password_strength(form, field):
@@ -52,36 +60,44 @@ def validate_password_strength(form, field):
     if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
         raise ValidationError('Password must contain at least one special character')
 
+# User model
+class User(db.Model):
+    __tablename__ = 'users'  # Specify the table name if it's already existing
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), unique=True, nullable=False)
+    email = db.Column(db.String(255), unique=True, nullable=False)
+    password = db.Column(db.String(255), nullable=False)
+    failed_attempts = db.Column(db.Integer, default=0)
+    lockout_time = db.Column(db.DateTime, nullable=True)
+
 class EditProfileForm(FlaskForm):
     name = StringField("Name", validators=[DataRequired()])
-    email = StringField("Email", validators=[DataRequired(), Email()])
-    current_password = PasswordField("Current Password")
-    new_password = PasswordField("New Password", validators=[validate_password_strength])
-    confirm_password = PasswordField("Confirm New Password")
+    email = StringField("Email")
     submit = SubmitField("Update Profile")
+
+    # Validate if name is already taken
+    def validate_name(self, field):
+        user = User.query.filter_by(name=field.data).first()
+        if user and user.id != session.get('user_id'):
+            raise ValidationError('Name already taken')
 
 # Register form with added name validation to prevent duplicates
 class RegisterForm(FlaskForm):
     name = StringField("Name", validators=[DataRequired()])
     email = StringField("Email", validators=[DataRequired(), Email()])
-    password = PasswordField("Password", validators=[DataRequired(), validate_password_strength])  # Added password validator
+    password = PasswordField("Password", validators=[DataRequired(), validate_password_strength])
+    confirm_password = PasswordField("Confirm Password")
     submit = SubmitField("Register")
 
     # Validate if email is already taken
     def validate_email(self, field):
-        cursor = mysql.connection.cursor()
-        cursor.execute("SELECT * FROM users WHERE email=%s", (field.data,))
-        user = cursor.fetchone()
-        cursor.close()
+        user = User.query.filter_by(email=field.data).first()
         if user:
             raise ValidationError('Email already taken')
     
     # Validate if name is already taken
     def validate_name(self, field):
-        cursor = mysql.connection.cursor()
-        cursor.execute("SELECT * FROM users WHERE name=%s", (field.data,))
-        user = cursor.fetchone()  # Fetch one user with the given name
-        cursor.close()
+        user = User.query.filter_by(name=field.data).first()
         if user:
             raise ValidationError('Name already taken')
 
@@ -89,6 +105,13 @@ class LoginForm(FlaskForm):
     email = StringField("Email", validators=[DataRequired(), Email()])
     password = PasswordField("Password", validators=[DataRequired()])
     submit = SubmitField("Login")
+
+
+# Context processor to inject csrf_token
+@app.context_processor
+def inject_csrf():
+    csrf_token = request.cookies.get('csrf_access_token')
+    return dict(csrf_token=csrf_token)
 
 @app.route('/')
 def index():
@@ -103,13 +126,14 @@ def register():
         password = form.password.data
 
         # Hash the password using bcrypt
-        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+        # Create a new user
+        new_user = User(name=name, email=email, password=hashed_password)
 
         # Store data into the database
-        cursor = mysql.connection.cursor()
-        cursor.execute("INSERT INTO users (name, email, password) VALUES (%s, %s, %s)", (name, email, hashed_password))
-        mysql.connection.commit()
-        cursor.close()
+        db.session.add(new_user)
+        db.session.commit()
 
         # Add success flash message here
         flash('Registration Successful! Please log in.', 'success')
@@ -118,7 +142,6 @@ def register():
 
     return render_template('register.html', form=form)
 
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     form = LoginForm()
@@ -126,115 +149,99 @@ def login():
         email = form.email.data
         password = form.password.data
 
-        cursor = mysql.connection.cursor()
-        cursor.execute("SELECT * FROM users WHERE email=%s", (email,))
-        user = cursor.fetchone()
+        user = User.query.filter_by(email=email).first()
 
         if user:
-            failed_attempts = user[4]  # Assuming 'failed_attempts'
-            lockout_time = user[5]  # Assuming 'lockout_time' 
+            failed_attempts = user.failed_attempts
+            lockout_time = user.lockout_time
 
-            if lockout_time:
-                current_time = datetime.now()
-                if current_time < lockout_time:
-                    flash("Too many failed attempts. Please try again after 1 minute.")
-                    cursor.close()
-                    return redirect(url_for('login'))
+            if lockout_time and datetime.now() < lockout_time:
+                flash("Too many failed attempts. Please try again later.")
+                return redirect(url_for('login'))
 
-            if bcrypt.checkpw(password.encode('utf-8'), user[3].encode('utf-8')):
-                cursor.execute("UPDATE users SET failed_attempts=0, lockout_time=NULL WHERE email=%s", (email,))
-                mysql.connection.commit()
+            if bcrypt.checkpw(password.encode('utf-8'), user.password.encode('utf-8')):
+                user.failed_attempts = 0
+                user.lockout_time = None
+                db.session.commit()
 
-                session['user_id'] = user[0]
-                cursor.close()
+                # Create JWT token
+                access_token = create_access_token(identity=user.id)
 
-                # Success flash message here
+                # Set the JWT in a cookie
+                response = redirect(url_for('dashboard'))
+                response.set_cookie('access_token', access_token, httponly=True)
+
                 flash('Login Successful!', 'success')
-
-                return redirect(url_for('dashboard'))
+                return response
             else:
-                new_attempts = failed_attempts + 1
-                if new_attempts >= 3:
-                    lockout_time = datetime.now() + timedelta(minutes=1)
-                    cursor.execute("UPDATE users SET failed_attempts=%s, lockout_time=%s WHERE email=%s",
-                                   (new_attempts, lockout_time, email))
+                user.failed_attempts += 1
+                if user.failed_attempts >= 3:
+                    user.lockout_time = datetime.now() + timedelta(minutes=1)
                     flash("Too many failed attempts. Please try again after 1 minute.")
                 else:
-                    cursor.execute("UPDATE users SET failed_attempts=%s WHERE email=%s",
-                                   (new_attempts, email))
                     flash("Login failed. Please check your email and password.")
-                
-                mysql.connection.commit()
 
+                db.session.commit()
         else:
             flash("Email does not exist.")
 
-        cursor.close()
         return redirect(url_for('login'))
 
     return render_template('login.html', form=form)
 
-
 @app.route('/dashboard')
+@jwt_required()
 def dashboard():
-    if 'user_id' in session:
-        user_id = session['user_id']
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
 
-        cursor = mysql.connection.cursor()
-        cursor.execute("SELECT * FROM users WHERE id=%s", (user_id,))
-        user = cursor.fetchone()
-        cursor.close()
-
-        if user:
-            return render_template('dashboard.html', user=user)
-
-    return redirect(url_for('login'))
+    if user:
+        return render_template('dashboard.html', user=user)
+    else:
+        flash("User not found.")
+        return redirect(url_for('login'))
 
 @app.route('/logout')
 def logout():
-    session.pop('user_id', None)
+    response = redirect(url_for('login'))
+    response.delete_cookie('access_token')
     flash("You have been logged out")
-    return redirect(url_for('login'))
+    return response
 
 @app.route('/edit_profile', methods=['GET', 'POST'])
+@jwt_required()
 def edit_profile():
-    if 'user_id' not in session:
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+    if not user: 
+        flash("User not found.")
         return redirect(url_for('login'))
+
 
     form = EditProfileForm()
 
-    # Fetch the current user info from the database
-    cursor = mysql.connection.cursor()
-    cursor.execute("SELECT * FROM users WHERE id=%s", (session['user_id'],))
-    user = cursor.fetchone()
 
     if form.validate_on_submit():
-        
         new_name = form.name.data
-        new_email = form.email.data
 
-        cursor.execute("UPDATE users SET name=%s, email=%s WHERE id=%s", (new_name, new_email, session['user_id']))
+        if User.query.filter(User.name == new_name, User.id != user.id).first():
+            flash('Name already taken')
+            return render_template('edit_profile.html', form=form)
 
-        # Check if the user is updating the password
-        if form.new_password.data:
-            # Hash the new password
-            new_hashed_password = bcrypt.hashpw(form.new_password.data.encode('utf-8'), bcrypt.gensalt())
-            cursor.execute("UPDATE users SET password=%s WHERE id=%s", (new_hashed_password, session['user_id']))
-            flash('Your password has been updated!')
+        user.name = new_name
 
-        mysql.connection.commit()
-        cursor.close()
+        db.session.commit()
 
         flash('Your profile has been updated!')
         return redirect(url_for('dashboard'))
 
     # Pre-populate the form fields with current user info
-    form.name.data = user[1]  # Assuming 'name' 
-    form.email.data = user[2]  # Assuming 'email' n
+    form.name.data = user.name
+    form.email.data = user.email
 
     return render_template('edit_profile.html', form=form)
 
 
-
 if __name__ == '__main__':
     app.run(debug=True)
+
