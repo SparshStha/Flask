@@ -9,9 +9,11 @@ import bcrypt
 import re
 import sys
 from datetime import datetime, timedelta
-
+from flask_jwt_extended import JWTManager
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+
 
 app = Flask(__name__)
 
@@ -23,6 +25,17 @@ DB_NAME = 'acs' # Change this to your database name
 # Database Configuration
 app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USERNAME}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+app.config['JWT_SECRET_KEY'] = 'ELJLH7KB42eqEqEabF7idfNOI5h3EXBh72vT4CKx82g='  # Change this!
+app.config['JWT_TOKEN_LOCATION'] = ['cookies']
+app.config['JWT_ACCESS_COOKIE_NAME'] = 'access_token'
+# app.config['JWT_COOKIE_CSRF_PROTECT'] = False  # Set to True and handle CSRF in forms for better security
+app.config['JWT_COOKIE_CSRF_PROTECT'] = True
+
+
+
+jwt = JWTManager(app)
+
 
 app.secret_key = 'your_secret_key_here'
 
@@ -98,6 +111,11 @@ class LoginForm(FlaskForm):
     password = PasswordField("Password", validators=[DataRequired()])
     submit = SubmitField("Login")
 
+# @app.context_processor
+# def inject_csrf_token():
+#     return dict(csrf_token=get_csrf_token())
+
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -140,22 +158,24 @@ def login():
             failed_attempts = user.failed_attempts
             lockout_time = user.lockout_time
 
-            if lockout_time:
-                current_time = datetime.now()
-                if current_time < lockout_time:
-                    flash("Too many failed attempts. Please try again after 1 minute.")
-                    return redirect(url_for('login'))
+            if lockout_time and datetime.now() < lockout_time:
+                flash("Too many failed attempts. Please try again later.")
+                return redirect(url_for('login'))
 
             if bcrypt.checkpw(password.encode('utf-8'), user.password.encode('utf-8')):
                 user.failed_attempts = 0
                 user.lockout_time = None
                 db.session.commit()
 
-                session['user_id'] = user.id
+                # Create JWT token
+                access_token = create_access_token(identity=user.id)
+
+                # Set the JWT in a cookie
+                response = redirect(url_for('dashboard'))
+                response.set_cookie('access_token', access_token, httponly=True)
 
                 flash('Login Successful!', 'success')
-
-                return redirect(url_for('dashboard'))
+                return response
             else:
                 user.failed_attempts += 1
                 if user.failed_attempts >= 3:
@@ -173,22 +193,24 @@ def login():
     return render_template('login.html', form=form)
 
 @app.route('/dashboard')
+@jwt_required()
 def dashboard():
-    if 'user_id' in session:
-        user_id = session['user_id']
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
 
-        user = User.query.get(user_id)
-
-        if user:
-            return render_template('dashboard.html', user=user)
-
-    return redirect(url_for('login'))
+    if user:
+        return render_template('dashboard.html', user=user)
+    else:
+        flash("User not found.")
+        return redirect(url_for('login'))
 
 @app.route('/logout')
 def logout():
-    session.pop('user_id', None)
+    response = redirect(url_for('login'))
+    response.delete_cookie('access_token')
     flash("You have been logged out")
-    return redirect(url_for('login'))
+    return response
+
 
 @app.route('/edit_profile', methods=['GET', 'POST'])
 def edit_profile():
