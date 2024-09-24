@@ -1,18 +1,21 @@
 
 # MySQL Configuration
 
-from flask import Flask, render_template, redirect, url_for, session, flash
+from flask import Flask, render_template, redirect, url_for, session, flash, request
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import DataRequired, Email, ValidationError, EqualTo
 import bcrypt
 import re
-import sys
 from datetime import datetime, timedelta
 from flask_jwt_extended import JWTManager
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import (
+    JWTManager, create_access_token, jwt_required, get_jwt_identity,
+    set_access_cookies, unset_jwt_cookies, get_csrf_token
+)
+import os
 
 
 app = Flask(__name__)
@@ -26,11 +29,12 @@ DB_NAME = 'acs' # Change this to your database name
 app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USERNAME}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-app.config['JWT_SECRET_KEY'] = 'ELJLH7KB42eqEqEabF7idfNOI5h3EXBh72vT4CKx82g='  # Change this!
+app.config['JWT_SECRET_KEY'] = 'ELJLH7KB42eqEqEabF7idfNOI5h3EXBh72vT4CKx82g='  
 app.config['JWT_TOKEN_LOCATION'] = ['cookies']
 app.config['JWT_ACCESS_COOKIE_NAME'] = 'access_token'
 # app.config['JWT_COOKIE_CSRF_PROTECT'] = False  # Set to True and handle CSRF in forms for better security
 app.config['JWT_COOKIE_CSRF_PROTECT'] = True
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
 
 
 
@@ -68,17 +72,8 @@ class User(db.Model):
 
 class EditProfileForm(FlaskForm):
     name = StringField("Name", validators=[DataRequired()])
-    email = StringField("Email", validators=[DataRequired(), Email()])
-    current_password = PasswordField("Current Password")
-    new_password = PasswordField("New Password", validators=[validate_password_strength, EqualTo('confirm_password', message='Passwords must match')])
-    confirm_password = PasswordField("Confirm New Password")
+    email = StringField("Email")
     submit = SubmitField("Update Profile")
-
-    # Validate if email is already taken
-    def validate_email(self, field):
-        user = User.query.filter_by(email=field.data).first()
-        if user and user.id != session.get('user_id'):
-            raise ValidationError('Email already taken')
 
     # Validate if name is already taken
     def validate_name(self, field):
@@ -111,10 +106,12 @@ class LoginForm(FlaskForm):
     password = PasswordField("Password", validators=[DataRequired()])
     submit = SubmitField("Login")
 
-# @app.context_processor
-# def inject_csrf_token():
-#     return dict(csrf_token=get_csrf_token())
 
+# Context processor to inject csrf_token
+@app.context_processor
+def inject_csrf():
+    csrf_token = request.cookies.get('csrf_access_token')
+    return dict(csrf_token=csrf_token)
 
 @app.route('/')
 def index():
@@ -211,44 +208,27 @@ def logout():
     flash("You have been logged out")
     return response
 
-
 @app.route('/edit_profile', methods=['GET', 'POST'])
+@jwt_required()
 def edit_profile():
-    if 'user_id' not in session:
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+    if not user: 
+        flash("User not found.")
         return redirect(url_for('login'))
+
 
     form = EditProfileForm()
 
-    # Fetch the current user info from the database
-    user = User.query.get(session['user_id'])
 
     if form.validate_on_submit():
         new_name = form.name.data
-        new_email = form.email.data
-
-        # Check if the new email or name is already taken by another user
-        if User.query.filter(User.email == new_email, User.id != user.id).first():
-            flash('Email already taken')
-            return render_template('edit_profile.html', form=form)
 
         if User.query.filter(User.name == new_name, User.id != user.id).first():
             flash('Name already taken')
             return render_template('edit_profile.html', form=form)
 
         user.name = new_name
-        user.email = new_email
-
-        # Check if the user is updating the password
-        if form.new_password.data:
-            # Verify current password
-            if not bcrypt.checkpw(form.current_password.data.encode('utf-8'), user.password.encode('utf-8')):
-                flash('Current password is incorrect.')
-                return render_template('edit_profile.html', form=form)
-
-            # Hash the new password
-            new_hashed_password = bcrypt.hashpw(form.new_password.data.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-            user.password = new_hashed_password
-            flash('Your password has been updated!')
 
         db.session.commit()
 
@@ -260,6 +240,7 @@ def edit_profile():
     form.email.data = user.email
 
     return render_template('edit_profile.html', form=form)
+
 
 if __name__ == '__main__':
     app.run(debug=True)
