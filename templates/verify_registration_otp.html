@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h4 class="text-center">Verify Your Account</h4>
+                        <p class="text-center">Please enter the OTP sent to your email</p>
+
+                        <!-- Flash Messages -->
+                        {% with messages = get_flashed_messages(with_categories=true) %}
+                            {% if messages %}
+                                <div class="alert">
+                                    {% for category, message in messages %}
+                                        <div class="alert alert-{{ category }}">
+                                            {{ message }}
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        {% endwith %}
+
+                        <!-- OTP Verification Form -->
+    <form method="POST" action="{{ url_for('verify_registration') }}" id="verify_registration" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <form  method="POST" action="{{ url_for('verify_registration') }}" id="verify_registration" autocomplete="off">
+
+                            <div class="form-group">
+                                <label for="otp">Enter OTP</label>
+                                <input type="text" class="form-control" id="otp" name="otp" placeholder="Enter your OTP" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-block">Verify OTP</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

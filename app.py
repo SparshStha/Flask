@@ -1,7 +1,8 @@
 
 # MySQL Configuration
-
 from flask import Flask, render_template, redirect, url_for, session, flash, request
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import DataRequired, Email, ValidationError, EqualTo
@@ -9,25 +10,14 @@ import bcrypt
 import re
 from datetime import datetime, timedelta
 from flask_jwt_extended import JWTManager
-from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
 from flask_jwt_extended import (
     JWTManager, create_access_token, jwt_required, get_jwt_identity,
-    set_access_cookies, unset_jwt_cookies, get_csrf_token
 )
-import os
-
+from flask_mail import Mail, Message
+from itsdangerous import URLSafeTimedSerializer
+import random
 
 app = Flask(__name__)
-
-DB_USERNAME = 'dipesh' # Change this to your username
-DB_PASSWORD = 'dipesh' # Change this to your password
-DB_HOST = 'localhost' # Change this to your MySQL host
-DB_NAME = 'acs' # Change this to your database name
-
-# Database Configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USERNAME}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 app.config['JWT_SECRET_KEY'] = 'ELJLH7KB42eqEqEabF7idfNOI5h3EXBh72vT4CKx82g='  
 app.config['JWT_TOKEN_LOCATION'] = ['cookies']
@@ -37,14 +27,82 @@ app.config['JWT_COOKIE_CSRF_PROTECT'] = True
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
 
 
+# Flask-Mail configuration
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'  # Your SMTP server, e.g., Gmail
+app.config['MAIL_PORT'] = 465
+app.config['MAIL_USERNAME'] = 'thapamanil37@gmail.com'  # Replace with your email
+app.config['MAIL_PASSWORD'] = 'kbaj ndpp ines huxf'  # Replace with your email password or app-specific password
+app.config['MAIL_USE_TLS'] = False
+app.config['MAIL_USE_SSL'] = True
+
+mail = Mail(app)
+
 
 jwt = JWTManager(app)
 
+DB_USERNAME = 'sparsh' # Change this to your username
+DB_PASSWORD = 'sparsh' # Change this to your password
+DB_HOST = 'localhost' # Change this to your MySQL host
+DB_NAME = 'acs' # Change this to your database name
+# Database Configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USERNAME}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+
+migrate = Migrate(app, db)
 
 app.secret_key = 'your_secret_key_here'
 
-db = SQLAlchemy(app)
-migrate = Migrate(app, db)
+# Serializer for email verification and password reset tokens
+serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
+
+def model_to_dict(model):
+    """Converts a SQLAlchemy model instance into a dictionary."""
+    return {column.name: getattr(model, column.name) for column in model.__table__.columns}
+
+
+class User(db.Model):
+    __tablename__ = 'users'  # Specify the table name if it's already existing
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), unique=True, nullable=False)
+    email = db.Column(db.String(255), unique=True, nullable=False)
+    password = db.Column(db.String(255), nullable=False)
+    failed_attempts = db.Column(db.Integer, default=0)
+    lockout_time = db.Column(db.DateTime, nullable=True)
+    otp = db.Column(db.String(6))  # Store the OTP code
+    otp_expiration = db.Column(db.DateTime)  # Store the OTP expiration time
+    email_confirmed = db.Column(db.Boolean, default=False)
+
+def send_otp_email(user_email, otp):
+    msg = Message(
+        subject="OTP for Account Verification",
+        sender=app.config['MAIL_USERNAME'],
+        recipients=[user_email],
+        body=f'Your OTP code is {otp}. It is valid for 5 minutes.'
+    )
+    mail.send(msg)
+
+def send_reset_email(to_email, reset_url):
+    msg = Message(
+        subject="Password Reset Request",
+        sender=app.config['MAIL_USERNAME'],
+        recipients=[to_email],
+        body=f'Click on the link to reset your password: {reset_url}'
+    )
+    mail.send(msg)
+
+
+def generate_otp(user):
+    otp = str(random.randint(100000, 999999))  # 6-digit OTP
+    user['otp'] = otp
+    user['otp_expiration'] = datetime.now() + timedelta(minutes=5)  # OTP valid for 5 minutes
+    db.session.commit()
+    send_otp_email(user['email'], otp)  # Call function to send OTP
+    return otp 
+
+def generate_reg_otp():
+    return str(random.randint(100000, 999999))  # 6-digit OTP
+
 
 # Custom validator for strong password
 def validate_password_strength(form, field):
@@ -59,16 +117,6 @@ def validate_password_strength(form, field):
         raise ValidationError('Password must contain at least one digit')
     if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
         raise ValidationError('Password must contain at least one special character')
-
-# User model
-class User(db.Model):
-    __tablename__ = 'users'  # Specify the table name if it's already existing
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(255), unique=True, nullable=False)
-    email = db.Column(db.String(255), unique=True, nullable=False)
-    password = db.Column(db.String(255), nullable=False)
-    failed_attempts = db.Column(db.Integer, default=0)
-    lockout_time = db.Column(db.DateTime, nullable=True)
 
 class EditProfileForm(FlaskForm):
     name = StringField("Name", validators=[DataRequired()])
@@ -89,11 +137,6 @@ class RegisterForm(FlaskForm):
     confirm_password = PasswordField("Confirm Password")
     submit = SubmitField("Register")
 
-    # Validate if email is already taken
-    def validate_email(self, field):
-        user = User.query.filter_by(email=field.data).first()
-        if user:
-            raise ValidationError('Email already taken')
     
     # Validate if name is already taken
     def validate_name(self, field):
@@ -124,6 +167,11 @@ def register():
         name = form.name.data
         email = form.email.data
         password = form.password.data
+        userExist = User.query.filter_by(email=email).first()
+        email_confirmed = True
+        if userExist:
+            email_confirmed = userExist.email_confirmed 
+
 
         # Hash the password using bcrypt
         hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -188,6 +236,47 @@ def login():
         return redirect(url_for('login'))
 
     return render_template('login.html', form=form)
+
+@app.route('/verify-otp', methods=['GET', 'POST'])
+def verify_otp():
+    user_id = session['user_id']
+    if not user_id:
+        print("user_id not ", user_id)
+
+        flash('Session expired or invalid access. Please log in again.', 'danger')
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        otp = request.form['otp']
+        print("otp is ---->" , otp)
+        # Fetch the user and verify OTP
+        cursor = mysql.connection.cursor()
+        cursor.execute("SELECT otp, otp_expiration FROM users WHERE id = %s", [user_id])
+        user = cursor.fetchone()
+        cursor.close()
+        print("user response ---> " , user)
+        if user:
+            stored_otp, otp_expiration = user
+            if stored_otp == otp:
+                # Check if the OTP has expired
+                if otp_expiration >= datetime.now():
+                    # Log the user in now that OTP is verified
+                    login_user(load_user(session['user_id']))
+                    session['otp_verified'] = True
+                    flash('OTP verified. You are now logged in!', 'success')
+                    return redirect(url_for('home'))
+                else:
+                    flash('The OTP has expired. Please log in again.', 'danger')
+                    return redirect(url_for('login'))
+            else:
+                flash('Invalid OTP. Please try again.', 'danger')
+        else:
+            flash('Invalid session. Please log in again.', 'danger')
+            return redirect(url_for('login'))
+
+    return render_template('verify_otp.html')
+
+
 
 @app.route('/dashboard')
 @jwt_required()
