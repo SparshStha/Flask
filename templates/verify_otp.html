@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+
+
+ <form method="POST" action="{{ url_for('verify_otp') }}" id="registerForm" autocomplete="off">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+<div class="container">
+    <h2>Enter the OTP sent to your email</h2>
+    <form method="POST" action="{{ url_for('verify_otp') }}">
+        <div class="form-group">
+            <label for="otp">OTP</label>
+            <input type="text" name="otp" id="otp" class="form-control" placeholder="Enter OTP" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Verify</button>
+    </form>
+</div>
+{% endblock %}
